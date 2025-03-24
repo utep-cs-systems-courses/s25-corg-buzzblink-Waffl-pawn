@@ -41,16 +41,17 @@ void configure_buttons(){
 
 void __interrupt_vec(WDT_VECTOR) WDT(){
   static int blink_count = 0;
-
+  buzzer_set_period(0);
+  
   switch(state){
   case 0:
     P1OUT &= ~LEDS;
-    buzzer_set_period(0);
+    buzzer_set_period(300);
     break;
   case 1:
     P1OUT |= LED_RED;
     P1OUT &= ~LED_GREEN;
-    buzzer_set_period(1000);
+    buzzer_set_period(900);
     break;
   case 2:
     if(++blink_count >= 125){
@@ -59,27 +60,27 @@ void __interrupt_vec(WDT_VECTOR) WDT(){
       P1OUT &= ~LED_GREEN;
 
     brightness = (brightness + 1) % 20;
-    buzzer_set_period(2000);
+    buzzer_set_period(950);
     break;
   }
 }
 
 #pragma vector = PORT2_VECTOR
 __interrupt void Port_2(void){
-  if(P2IFG & BIT0){
+  if(P2IFG & SW1){
     state = 1;
     //transition_state(state);
     P2IFG &= ~BIT0;
   }
-  if(P2IFG & BIT1){
+  if(P2IFG & SW2){
     state = 2;
     P2IFG &= ~BIT1;
   }
-  if(P2IFG & BIT1){
+  if(P2IFG & SW3){
     state = 3;
     P2IFG &= ~BIT2;
   }
-  if(P2IFG & BIT1){
+  if(P2IFG & SW4){
     state = 0;
     P2IFG &= ~BIT3;
   }

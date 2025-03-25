@@ -1,3 +1,4 @@
+
 #include <msp430.h>
 #include "buzzer.h"
 #include "led.h"
@@ -29,60 +30,96 @@ void main(void){
   or_sr(0x18);
 }
 
-void configure_buttons(){
-  P2REN |= SWITCHES;
-  P2OUT |= SWITCHES;
-  P2IE = SWITCHES;
-  P2DIR &= ~SWITCHES;
+static char
+switch_update_interrupt_sense(){
+  char p2val = P2IN;
+  /* update switch interrupt to detect changes from current buttons */
+  P2IES |= (p2val & SWITCHES);/* if switch up, sense down */
+  P2IES &= (p2val | ~SWITCHES);/* if switch down, sense up */
+  return p2val;
+}
 
-  P2IES |= (P2IN & SWITCHES);
-  P2IES &= (P2IN | ~SWITCHES);
+void configure_buttons(){
+  P2REN |= SWITCHES;/* enables resistors for switches */
+  P2IE |= SWITCHES;/* enable interrupts from switches */
+  P2OUT |= SWITCHES;/* pull-ups for switches */
+  P2DIR &= ~SWITCHES;/* set switches' bits for input */
+
+  switch_update_interrupt_sense();
+}
+
+
+int switches = 0;
+
+void
+switch_interrupt_handler(){
+  char p2val = switch_update_interrupt_sense();
+  switches = ~p2val & SWITCHES;
 }
 
 void __interrupt_vec(WDT_VECTOR) WDT(){
   static int blink_count = 0;
-  buzzer_set_period(0);
+  static int cycle =500;
+  blink_count++;
   
   switch(state){
-  case 0:
+  case 0://turning everything off
     P1OUT &= ~LEDS;
-    buzzer_set_period(300);
+    buzzer_set_period(0);
     break;
-  case 1:
+  case 1://turning on green and increasing buzzer cycle
+    P1OUT |= LED_GREEN;
+    P1OUT &= ~LED_RED;
+    buzzer_set_period(cycle++);
+    break;
+  case 2://turning on red and decreasing buzzer cycle
     P1OUT |= LED_RED;
     P1OUT &= ~LED_GREEN;
-    buzzer_set_period(900);
+    buzzer_set_period(cycle--);
     break;
-  case 2:
-    if(++blink_count >= 125){
+  case 3://Dimming the lights... because they're too BRIGHT!!
+    if(blink_count >= 1){
       P1OUT |= LED_GREEN;
-    }else
+      P1OUT |= LED_RED;
+    }else{
       P1OUT &= ~LED_GREEN;
+      P1OUT &= ~LED_RED;
+    }  
 
-    brightness = (brightness + 1) % 20;
-    buzzer_set_period(950);
+    //turning buzzer off and on
+    if(blink_count >= 150){
+      buzzer_set_period(0);
+    }else
+      buzzer_set_period(500);
+   
+    if(blink_count >= 250) blink_count=0;
     break;
   }
 }
 
-#pragma vector = PORT2_VECTOR
-__interrupt void Port_2(void){
+void
+__interrupt_vec(PORT2_VECTOR) Port_2(){
   if(P2IFG & SW1){
-    state = 1;
+    state = 0;
     //transition_state(state);
     P2IFG &= ~BIT0;
+    switch_interrupt_handler();
   }
   if(P2IFG & SW2){
-    state = 2;
+    state = 1;
     P2IFG &= ~BIT1;
+    switch_interrupt_handler();
   }
   if(P2IFG & SW3){
-    state = 3;
+    state = 2;
     P2IFG &= ~BIT2;
+    switch_interrupt_handler();
   }
   if(P2IFG & SW4){
-    state = 0;
+    state = 3;
     P2IFG &= ~BIT3;
+    switch_interrupt_handler();
   }
   
 }
+
